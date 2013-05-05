@@ -1403,9 +1403,9 @@ static void dbs_check_frequency(struct cpufreq_nightmare_cpuinfo *this_dbs_info)
 		if (!policy)
 			continue;
 
-		policy->shared_type = CPUFREQ_SHARED_TYPE_ANY;
+		/*policy->shared_type = CPUFREQ_SHARED_TYPE_ANY;
 		cpumask_setall(policy->related_cpus);
-		cpumask_setall(policy->cpus);
+		cpumask_setall(policy->cpus);*/
 
 		/* I need to integrate into exynos_cpufreq.c */
 		/*policy->cpu = j;*/
@@ -1700,23 +1700,23 @@ static int cpufreq_governor_nightmare(struct cpufreq_policy *policy,
 
 		for_each_online_cpu(j) {
 			struct cpufreq_policy *cpu_policy;
-			struct cpufreq_nightmare_cpuinfo *cpu_dbs_info;
+			/*struct cpufreq_nightmare_cpuinfo *cpu_dbs_info;*/
 
 			cpu_policy = cpufreq_cpu_get(j);
 			if (!cpu_policy)
 				continue;
 
-			cpu_policy->shared_type = CPUFREQ_SHARED_TYPE_ANY;
+			/*cpu_policy->shared_type = CPUFREQ_SHARED_TYPE_ANY;
 			cpumask_setall(cpu_policy->related_cpus);
-			cpumask_setall(cpu_policy->cpus);
+			cpumask_setall(cpu_policy->cpus);*/
 
 			if (policy->max < cpu_policy->cur)
 				__cpufreq_driver_target(cpu_policy,policy->max,CPUFREQ_RELATION_H);
 			else if (policy->min > cpu_policy->cur)
 				__cpufreq_driver_target(cpu_policy,policy->min,CPUFREQ_RELATION_L);
 
-			cpu_dbs_info = &per_cpu(od_cpu_dbs_info, j);
-			cpu_dbs_info->cur_policy = cpu_policy;
+			/*cpu_dbs_info = &per_cpu(od_cpu_dbs_info, j);
+			cpu_dbs_info->cur_policy = cpu_policy;*/
 
 			cpufreq_cpu_put(policy);
 
