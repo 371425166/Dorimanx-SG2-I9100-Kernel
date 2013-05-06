@@ -235,8 +235,8 @@ struct cpufreq_nightmare_cpuinfo {
 	cputime64_t prev_cpu_nice;
 	struct cpufreq_policy *cur_policy;
 	struct delayed_work work;
-	/*struct work_struct up_work;
-	struct work_struct down_work;*/
+	struct work_struct up_work;
+	struct work_struct down_work;
 	struct cpufreq_frequency_table *freq_table;
 	unsigned int rate_mult;
 	int cpu;
@@ -249,7 +249,7 @@ struct cpufreq_nightmare_cpuinfo {
 };
 static DEFINE_PER_CPU(struct cpufreq_nightmare_cpuinfo, od_cpu_dbs_info);
 
-/*struct workqueue_struct *dvfs_workqueues;*/
+struct workqueue_struct *dvfs_workqueues;
 
 static unsigned int dbs_enable;	/* number of CPUs using this policy */
 
@@ -329,7 +329,7 @@ static atomic_t g_hotplug_lock = ATOMIC_INIT(0);
 static void apply_hotplug_lock(void)
 {
 	int online, possible, lock, flag;
-	/*struct work_struct *work;*/
+	struct work_struct *work;
 	struct cpufreq_nightmare_cpuinfo *dbs_info;
 
 	/* do turn_on/off cpus */
@@ -342,17 +342,12 @@ static void apply_hotplug_lock(void)
 	if (lock == 0 || flag == 0)
 		return;
 
-	/*work = flag > 0 ? &dbs_info->up_work : &dbs_info->down_work;*/
+	work = flag > 0 ? &dbs_info->up_work : &dbs_info->down_work;
 
 	pr_debug("%s online %d possible %d lock %d flag %d %d\n",
 		 __func__, online, possible, lock, flag, (int)abs(flag));
 
-	/*queue_work_on(dbs_info->cpu, dvfs_workqueues, work);*/
-	if (flag > 0) {
-		cpu_up(1);
-	} else {
-		cpu_down(1);
-	}
+	queue_work_on(dbs_info->cpu, dvfs_workqueues, work);
 }
 
 int cpufreq_nightmare_cpu_lock(int num_core)
@@ -403,8 +398,7 @@ void cpufreq_nightmare_min_cpu_lock(unsigned int num_core)
 	flag = (int)num_core - online;
 	if (flag <= 0)
 		return;
-	/*queue_work_on(dbs_info->cpu, dvfs_workqueues, &dbs_info->up_work);*/
-	cpu_up(1);
+	queue_work_on(dbs_info->cpu, dvfs_workqueues, &dbs_info->up_work);
 }
 
 void cpufreq_nightmare_min_cpu_unlock(void)
@@ -422,8 +416,7 @@ void cpufreq_nightmare_min_cpu_unlock(void)
 	flag = lock - online;
 	if (flag >= 0)
 		return;
-	/*queue_work_on(dbs_info->cpu, dvfs_workqueues, &dbs_info->down_work);*/
-	cpu_down(1);
+	queue_work_on(dbs_info->cpu, dvfs_workqueues, &dbs_info->down_work);
 }
 
 /*
@@ -1370,16 +1363,10 @@ static void dbs_check_cpu(struct cpufreq_nightmare_cpuinfo *this_dbs_info)
 
 	/* Check for CPU hotplug */
 	if (check_up()) {		
-		/*queue_work_on(this_dbs_info->cpu, dvfs_workqueues,&this_dbs_info->up_work);*/
-		mutex_unlock(&this_dbs_info->timer_mutex);
-		cpu_up(1);
-		mutex_lock(&this_dbs_info->timer_mutex);
+		queue_work_on(this_dbs_info->cpu, dvfs_workqueues,&this_dbs_info->up_work);
 	}	
 	else if (check_down()) {
-		/*queue_work_on(this_dbs_info->cpu, dvfs_workqueues,&this_dbs_info->down_work);*/
-		mutex_unlock(&this_dbs_info->timer_mutex);
-		cpu_down(1);
-		mutex_lock(&this_dbs_info->timer_mutex);
+		queue_work_on(this_dbs_info->cpu, dvfs_workqueues,&this_dbs_info->down_work);
 	}
 	if (hotplug_histories->num_hist == max_hotplug_rate)
 		hotplug_histories->num_hist = 0;
@@ -1402,12 +1389,15 @@ static void dbs_check_frequency(struct cpufreq_nightmare_cpuinfo *this_dbs_info)
 	unsigned int freq_down = 0;
 	unsigned int freq_for_calc_incr = dbs_tuners_ins.freq_for_calc_incr;
 	unsigned int freq_for_calc_decr = dbs_tuners_ins.freq_for_calc_decr;
+	unsigned int ccore = 0;
 
 	for_each_online_cpu(j) {
 		struct cpufreq_policy *policy;
 		int load = -1;
 
 		load = hotplug_histories->usage[num_hist].load[j];
+
+		ccore++;
 
 		policy = cpufreq_cpu_get(j);
 		if (!policy)
@@ -1495,8 +1485,7 @@ static void do_dbs_timer(struct work_struct *work)
 	if (num_online_cpus() > 1)
 		delay -= jiffies % delay;
 
-	/*queue_delayed_work_on(cpu, dvfs_workqueues, &dbs_info->work, delay);*/
-	schedule_delayed_work_on(cpu, &dbs_info->work, delay);
+	queue_delayed_work_on(cpu, dvfs_workqueues, &dbs_info->work, delay);
 	mutex_unlock(&dbs_info->timer_mutex);
 }
 
@@ -1509,22 +1498,19 @@ static inline void dbs_timer_init(struct cpufreq_nightmare_cpuinfo *dbs_info)
 	if (num_online_cpus() > 1)
 		delay -= jiffies % delay;
 
-	/*INIT_DEFERRABLE_WORK(&dbs_info->work, do_dbs_timer);
+	INIT_DEFERRABLE_WORK(&dbs_info->work, do_dbs_timer);
 	INIT_WORK(&dbs_info->up_work, cpu_up_work);
 	INIT_WORK(&dbs_info->down_work, cpu_down_work);
 
 	queue_delayed_work_on(dbs_info->cpu, dvfs_workqueues,
-			      &dbs_info->work, delay + 2 * HZ);*/
-
-	INIT_DELAYED_WORK(&dbs_info->work, do_dbs_timer);
-	schedule_delayed_work_on(dbs_info->cpu, &dbs_info->work, delay + 2 * HZ);
+			      &dbs_info->work, delay + 2 * HZ);
 }
 
 static inline void dbs_timer_exit(struct cpufreq_nightmare_cpuinfo *dbs_info)
 {
 	cancel_delayed_work_sync(&dbs_info->work);
-	/*cancel_work_sync(&dbs_info->up_work);
-	cancel_work_sync(&dbs_info->down_work);*/
+	cancel_work_sync(&dbs_info->up_work);
+	cancel_work_sync(&dbs_info->down_work);
 }
 
 static int pm_notifier_call(struct notifier_block *this,
@@ -1756,12 +1742,12 @@ static int __init cpufreq_gov_nightmare_init(void)
 		goto err_hist;
 	}
 
-	/*dvfs_workqueues = create_workqueue("knightmare");
+	dvfs_workqueues = create_workqueue("knightmare");
 	if (!dvfs_workqueues) {
 		pr_err("%s cannot create workqueue\n", __func__);
 		ret = -ENOMEM;
 		goto err_queue;
-	}*/
+	}
 
 	ret = cpufreq_register_governor(&cpufreq_gov_nightmare);
 	if (ret)
@@ -1776,7 +1762,7 @@ static int __init cpufreq_gov_nightmare_init(void)
 	return ret;
 
 err_reg:
-	/*destroy_workqueue(dvfs_workqueues);*/
+	destroy_workqueue(dvfs_workqueues);
 err_queue:
 	kfree(hotplug_histories);
 err_hist:
@@ -1787,7 +1773,7 @@ err_hist:
 static void __exit cpufreq_gov_nightmare_exit(void)
 {
 	cpufreq_unregister_governor(&cpufreq_gov_nightmare);
-	/*destroy_workqueue(dvfs_workqueues);*/
+	destroy_workqueue(dvfs_workqueues);
 	kfree(hotplug_histories);
 	kfree(rq_data);
 }
